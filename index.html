@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="initial-scale=1,user-scalable=no,maximum-scale=1,width=device-width">
+  <title>Dashboard Kepadatan Penduduk Kalimantan Timur</title>
+  <link rel="stylesheet" href="css/leaflet.css">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: "Poppins", Arial, sans-serif;
+      background-color: #f0f2f5;
+    }
+
+    #container {
+      display: flex;
+      height: 100%;
+    }
+
+    /* Sidebar */
+    #sidebar {
+      width: 380px;
+      background: #ffffff;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 3px 0 10px rgba(0,0,0,0.1);
+      overflow-y: auto;
+      z-index: 1000;
+    }
+
+    #sidebar-header {
+      background: linear-gradient(135deg, #007bff, #00c6ff);
+      color: #fff;
+      padding: 15px;
+      text-align: center;
+      font-size: 17px;
+      font-weight: 600;
+      border-bottom: 3px solid #ddd;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+
+    #sidebar-header img {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      margin-bottom: 8px;
+      border: 2px solid #fff;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    }
+
+    #sidebar-content {
+      padding: 20px;
+    }
+
+    .info-box {
+      background: #f8f9fa;
+      border-left: 5px solid #007bff;
+      padding: 12px;
+      border-radius: 10px;
+      margin-bottom: 15px;
+      transition: all 0.2s ease;
+    }
+
+    .info-box:hover {
+      transform: scale(1.02);
+      background: #f1f8ff;
+    }
+
+    /* Search */
+    #search-box {
+      margin-bottom: 15px;
+      display: flex;
+      gap: 8px;
+    }
+
+    #search-input {
+      flex: 1;
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      outline: none;
+      font-size: 14px;
+    }
+
+    #search-btn, #reset-btn {
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 12px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
+    #reset-btn { background: #dc3545; }
+    #search-btn:hover { background: #0056b3; }
+    #reset-btn:hover { background: #b02a37; }
+
+    #legend {
+      background: white;
+      padding: 10px;
+      border-radius: 10px;
+      font-size: 13px;
+      color: #333;
+      box-shadow: 0 0 8px rgba(0,0,0,0.3);
+      margin-bottom: 15px;
+    }
+
+    #legend i {
+      width: 20px;
+      height: 12px;
+      float: left;
+      margin-right: 6px;
+      opacity: 0.8;
+    }
+
+    #chart-container {
+      background: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 0 8px rgba(0,0,0,0.15);
+      padding: 10px;
+      margin-top: 10px;
+    }
+
+    #map {
+      flex: 1;
+      background: #d6d6d6;
+      transition: all 0.5s ease;
+    }
+
+    .leaflet-tooltip.label-kota {
+      background: rgba(255,255,255,0.75);
+      border: none;
+      font-size: 11px;
+      font-weight: 600;
+      color: #111;
+      pointer-events: none;
+      padding: 1px 4px;
+      text-shadow: 0 0 2px rgba(255,255,255,0.9);
+    }
+
+    .kategori-label {
+      font-weight: 600;
+      padding: 3px 6px;
+      border-radius: 6px;
+      color: #111;
+      text-shadow: 0 0 3px rgba(255,255,255,0.9);
+      display: inline-block;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+
+<body>
+<div id="container">
+  <div id="sidebar">
+    <div id="sidebar-header">
+      <img src="images\logokaltim.png" alt="Logo Kaltim">
+      <div>🗺️ Dashboard Kepadatan Penduduk <br> Kalimantan Timur</div>
+    </div>
+    <div id="sidebar-content">
+
+      <div id="search-box">
+        <input id="search-input" type="text" placeholder="Cari kabupaten/kota...">
+        <button id="search-btn">Cari</button>
+        <button id="reset-btn">Reset</button>
+      </div>
+
+      <div id="legend">
+        <strong>Kepadatan (Jiwa/km²)</strong><br>
+        <i style="background:#fff5f0"></i> 0–2 (Sangat Rendah)<br>
+        <i style="background:#fcbba1"></i> 2–15 (Rendah)<br>
+        <i style="background:#fc9272"></i> 15–127 (Sedang)<br>
+        <i style="background:#fb6a4a"></i> 127–1208 (Tinggi)<br>
+        <i style="background:#67000d"></i> >1208 (Sangat Tinggi)
+      </div>
+
+      <div class="info-box" id="infoWilayah">
+        <strong>Info Wilayah:</strong><br>
+        <em>Belum ada wilayah yang dipilih</em>
+      </div>
+
+      <div id="chart-container">
+        <canvas id="chartKepadatan"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div id="map"></div>
+</div>
+
+<!-- Library -->
+<script src="js/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="data/FINAL_DATA_1.js"></script>
+
+<script>
+var map = L.map('map').setView([0.5, 117.2], 7);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap contributors'
+}).addTo(map);
+
+function getColor(d) {
+  return d > 1208 ? '#67000d' :
+         d > 127  ? '#fb6a4a' :
+         d > 15   ? '#fc9272' :
+         d > 2    ? '#fcbba1' :
+                    '#fff5f0';
+}
+
+function lightenColor(color, percent) {
+  var num = parseInt(color.slice(1), 16),
+      amt = Math.round(2.55 * percent),
+      R = (num >> 16) + amt,
+      G = (num >> 8 & 0x00FF) + amt,
+      B = (num & 0x0000FF) + amt;
+  return "#" + (
+    0x1000000 +
+    (R<255?R<1?0:R:255)*0x10000 +
+    (G<255?G<1?0:G:255)*0x100 +
+    (B<255?B<1?0:B:255)
+  ).toString(16).slice(1);
+}
+
+function style(feature) {
+  return {
+    fillColor: getColor(feature.properties.KEPTD_KM2),
+    weight: 1.2,
+    opacity: 1,
+    color: '#555',
+    fillOpacity: 1
+  };
+}
+
+let activeLayer = null;
+
+// Data awal chart
+const ctx = document.getElementById('chartKepadatan').getContext('2d');
+const labels = json_FINAL_DATA_1.features.map(f => f.properties.KAB_KOTA);
+const dataKepadatan = json_FINAL_DATA_1.features.map(f => f.properties.KEPTD_KM2);
+
+// Buat array warna sesuai kepadatan untuk pie chart awal
+const backgroundColors = json_FINAL_DATA_1.features.map(f => getColor(f.properties.KEPTD_KM2));
+
+const chartKepadatan = new Chart(ctx, {
+  type: 'pie',
+  data: {
+    labels: labels,
+    datasets: [{
+      data: dataKepadatan,
+      backgroundColor: backgroundColors, // Gunakan warna sesuai kepadatan
+      borderWidth: 1,
+      borderColor: '#fff'
+    }]
+  },
+  options: {
+    animation: { animateScale: true, duration: 1200 },
+    plugins: {
+      legend: { position: 'bottom' },
+      title: {
+        display: true,
+        text: 'Distribusi Kepadatan Penduduk per Kabupaten/Kota',
+        color: '#222',
+        font: { size: 14, weight: 'bold' }
+      }
+    }
+  }
+});
+
+function resetChart() {
+  chartKepadatan.data.labels = labels;
+  chartKepadatan.data.datasets[0].data = dataKepadatan;
+  chartKepadatan.data.datasets[0].backgroundColor = backgroundColors; // Reset ke warna kepadatan
+  chartKepadatan.update();
+}
+
+function getKategori(kepadatan) {
+  if (kepadatan > 1208) return {text: "Sangat Tinggi", color: "#67000d"};
+  if (kepadatan > 127) return {text: "Tinggi", color: "#fb6a4a"};
+  if (kepadatan > 15) return {text: "Sedang", color: "#fc9272"};
+  if (kepadatan > 2) return {text: "Rendah", color: "#fcbba1"};
+  return {text: "Sangat Rendah", color: "#fff5f0"};
+}
+
+function onEachFeature(feature, layer) {
+  const baseColor = getColor(feature.properties.KEPTD_KM2);
+
+  layer.on({
+    mouseover: function(e) {
+      e.target.setStyle({ weight: 2, color: '#000', fillOpacity: 1 });
+      e.target.bringToFront();
+    },
+    mouseout: function(e) {
+      if (activeLayer !== e.target) geojson.resetStyle(e.target);
+    },
+    click: function(e) {
+      if (activeLayer) geojson.resetStyle(activeLayer);
+      activeLayer = e.target;
+
+      const brightColor = lightenColor(baseColor, 25);
+      activeLayer.setStyle({
+        weight: 4,
+        color: '#000',
+        fillColor: brightColor,
+        fillOpacity: 1
+      });
+
+      const props = feature.properties;
+      const kategori = getKategori(props.KEPTD_KM2);
+
+      document.getElementById('infoWilayah').innerHTML = `
+        <strong>Kabupaten/Kota:</strong> ${props.KAB_KOTA}<br>
+        <strong>Jumlah Penduduk:</strong> ${props.JUMLAH_PEN?.toLocaleString() || '-'} jiwa<br>
+        <strong>Luas Wilayah:</strong> ${props.WIlAYAH_KM || '-'} km²<br>
+        <strong>Kepadatan:</strong> ${props.KEPTD_KM2 || '-'} jiwa/km²<br>
+        <strong>Kategori:</strong> <span class="kategori-label" style="background:${kategori.color}">${kategori.text}</span>
+      `;
+
+      const bounds = e.target.getBounds();
+      map.flyToBounds(bounds, { duration: 2, easeLinearity: 0.25 });
+
+      // update chart hanya wilayah ini dengan warna sesuai kepadatan
+      chartKepadatan.data.labels = [props.KAB_KOTA];
+      chartKepadatan.data.datasets[0].data = [props.KEPTD_KM2];
+      chartKepadatan.data.datasets[0].backgroundColor = [baseColor]; // Gunakan warna sesuai kepadatan
+      chartKepadatan.update();
+    }
+  });
+
+  if (feature.properties.KAB_KOTA) {
+    const center = layer.getBounds().getCenter();
+    L.tooltip({
+      permanent: true,
+      direction: 'center',
+      className: 'label-kota'
+    })
+    .setLatLng(center)
+    .setContent(feature.properties.KAB_KOTA)
+    .addTo(map);
+  }
+}
+
+var geojson = L.geoJson(json_FINAL_DATA_1, {
+  style: style,
+  onEachFeature: onEachFeature
+}).addTo(map);
+
+// Reset
+document.getElementById('reset-btn').addEventListener('click', function() {
+  map.flyTo([0.5, 117.2], 7, { duration: 2 });
+  if (activeLayer) geojson.resetStyle(activeLayer);
+  activeLayer = null;
+  document.getElementById('infoWilayah').innerHTML = `
+    <strong>Info Wilayah:</strong><br>
+    <em>Belum ada wilayah yang dipilih</em>
+  `;
+  resetChart(); // reset pie chart juga
+});
+
+// Search
+document.getElementById('search-btn').addEventListener('click', function() {
+  const searchValue = document.getElementById('search-input').value.toLowerCase().trim();
+  if (!searchValue) return;
+
+  let found = false;
+  geojson.eachLayer(function(layer) {
+    const name = layer.feature.properties.KAB_KOTA.toLowerCase();
+    if (name === searchValue) {
+      const bounds = layer.getBounds();
+      map.flyToBounds(bounds, { duration: 2.5, easeLinearity: 0.25 });
+      found = true;
+      layer.fire('click');
+    }
+  });
+
+  if (!found) alert("Wilayah tidak ditemukan. Coba nama lain.");
+});
+</script>
+</body>
+</html>
